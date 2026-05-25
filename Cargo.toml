@@ -1,0 +1,43 @@
+[package]
+name = "prism-dsa"
+version = "0.1.0"
+edition = "2021"
+description = "PRISM-DSA: Post-quantum Ring-based Ideal Signature Mechanism with Fixed-Iteration Signing"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/qreativelab/prism-dsa"
+keywords = ["post-quantum", "cryptography", "signature", "lattice", "pqc"]
+categories = ["cryptography"]
+
+[dependencies]
+sha3 = "0.10"
+subtle = { version = "2.5", default-features = false, features = ["const-generics"] }
+rand_core = "0.6"
+zeroize = { version = "1.7", features = ["derive"] }
+ml-dsa = "0.1.0"
+rand = "0.8"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+rand = "0.8"
+hex = "0.4"
+ml-dsa = "0.1.0"
+
+[[bench]]
+name = "bench"
+harness = false
+
+[features]
+default = ["prism128"]
+prism128 = []
+prism192 = []
+prism256 = []
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+
+[profile.bench]
+opt-level = 3
+lto = false
+codegen-units = 4
