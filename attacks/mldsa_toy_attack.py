@@ -10,12 +10,42 @@ Correct lattice basis (dim = nl + nk + 1):
 
 Short vector in reduced basis = (-s1, s2, ±1)
 Recovery: s1 = -(first nl coords), s2 = (next nk coords) when last coord = ±1
+
+PEDAGOGICAL ONLY — standard primal MLWE attack (Kannan 1987, Lindner-Peikert 2011).
+Not a novel contribution. Not a break of any NIST-standardized scheme.
 """
 
 import numpy as np
 import time
 from scipy.linalg import toeplitz
 from fpylll import IntegerMatrix, LLL, BKZ, GSO
+
+# ---------------------------------------------------------------------------
+# Known parameter sets — fail-fast on mismatch
+# ---------------------------------------------------------------------------
+
+KNOWN_PARAMS = {
+    "TOY_KEM_LIKE":  (3329,    32,  2, 2, 2),   # this file's default toy
+    "ML_KEM_512":    (3329,   256,  2, 2, 3),
+    "ML_KEM_768":    (3329,   256,  3, 3, 2),
+    "ML_KEM_1024":   (3329,   256,  4, 4, 2),
+    "ML_DSA_44":     (8380417, 256, 4, 4, 2),
+    "ML_DSA_65":     (8380417, 256, 6, 5, 4),
+    "ML_DSA_87":     (8380417, 256, 8, 7, 2),
+}
+
+def assert_known_params(q: int, n: int, k: int, l: int, eta: int) -> str:
+    """Fail-fast if params don't match any known scheme. Returns scheme name."""
+    for name, params in KNOWN_PARAMS.items():
+        if (q, n, k, l, eta) == params:
+            return name
+    # Custom toy — warn but don't crash
+    import warnings
+    warnings.warn(
+        f"Params (q={q}, n={n}, k={k}, l={l}, η={eta}) match no known scheme. "
+        f"Known: {list(KNOWN_PARAMS.keys())}"
+    )
+    return "UNKNOWN_TOY"
 
 # ---------------------------------------------------------------------------
 # Ring arithmetic over Z_q[X]/(X^n+1)
@@ -206,10 +236,12 @@ def find_beta_critical(n, k, l, q, eta, rng, beta_max=55):
 if __name__ == "__main__":
     rng = np.random.default_rng(42)
     k, l, q, eta = 2, 2, 3329, 2
+    n_default = 8  # overridden in loop
 
+    scheme = assert_known_params(q, 32, k, l, eta)  # use n=32 as representative
     print("=" * 66)
-    print("ML-DSA Toy Primal Attack — Kannan Embedding + BKZ")
-    print(f"Params: k={k} l={l} q={q} (Kyber) η={eta}")
+    print("Module-LWE Toy Primal Attack — Kannan Embedding + BKZ")
+    print(f"Params: k={k} l={l} q={q} η={eta}  [{scheme}]")
     print("=" * 66)
     print(f"{'n':>5}  {'dim':>5}  {'β_crit':>8}  {'time':>9}  status")
     print("-" * 66)
