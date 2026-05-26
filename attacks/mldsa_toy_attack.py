@@ -95,7 +95,10 @@ def sample_uniform(n: int, q: int, rng) -> np.ndarray:
 
 
 def sample_secret(n: int, eta: int, rng) -> np.ndarray:
-    return rng.integers(-eta, eta + 1, size=n, dtype=np.int64)
+    """CBD(eta): sum of eta pairs of uniform bits, variance = eta/2. NIST-aligned."""
+    a = rng.integers(0, 2, size=(n, eta), dtype=np.int64).sum(axis=1)
+    b = rng.integers(0, 2, size=(n, eta), dtype=np.int64).sum(axis=1)
+    return (a - b).astype(np.int64)
 
 
 def keygen(n: int, k: int, l: int, q: int, eta: int, rng):
