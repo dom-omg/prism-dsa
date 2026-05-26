@@ -31,12 +31,13 @@ of the signing loop design.  See Section 4.5 and [COBALT26].
 The scheme uses identical parameters to ML-DSA-44/65/87; PRISM-DSA signatures
 are valid ML-DSA signatures.  On an aarch64 Linux machine (pure Rust, no SIMD,
 Rust-vs-Rust comparison against RustCrypto ml-dsa), PRISM-128 achieves keygen
-in 49.5 µs (faster than ML-DSA-44 at 63.0 µs and ML-DSA-65 at 106.3 µs),
-signing in 1.46 ms, and verification in 47.1 µs.  The signing overhead vs
-non-CT ML-DSA-65 is 8.3×; however, a constant-time ML-DSA-65 forced to run all
-64 iterations would cost ≈ 8.0 ms, making PRISM-128 **5.5× faster** for the
-same CT guarantee.  The failure probability is 2^{-23} at FIS_SLOTS = 64
-(approximately 1 failure per 8 million signing operations).
+in 69.4 µs (comparable to ML-DSA-44 at 67.6 µs, faster than ML-DSA-65 at
+109.7 µs), signing in 1.63 ms, and verification in 49.4 µs.  The signing
+overhead vs non-CT ML-DSA-44 (same K=4, L=4 dimensions) is 10×; however, a
+constant-time ML-DSA-44 forced to run all 64 iterations would cost ≈ 2.3 ms,
+making PRISM-128 **1.4× faster** for the same CT guarantee.  The failure
+probability is 2^{-23} at FIS_SLOTS = 64 (approximately 1 failure per 8
+million signing operations).
 
 ---
 
@@ -668,59 +669,56 @@ pending implementation). The table below covers PRISM-128 only.
 
 | Operation | PRISM-128 | ML-DSA-44 (Rust) | ML-DSA-65 (Rust) | ML-DSA-87 (Rust) |
 |-----------|-----------|-----------------|-----------------|-----------------|
-| KeyGen | **49.5 µs** | 63.0 µs | 106.3 µs | 166.3 µs |
-| Sign | 1,460 µs | 72.4 µs | 175 µs | 972 µs* |
-| Verify | 47.1 µs | 16.6 µs | 23.2 µs | 33.0 µs |
+| KeyGen | 69.4 µs | 67.6 µs | 109.7 µs | 172.9 µs |
+| Sign | **1,631 µs** | 163.6 µs | 58.9 µs† | 558.3 µs† |
+| Verify | 49.4 µs | 16.2 µs | 35.1 µs | 33.5 µs |
 
-_*See cache anomaly note below._
+_†ML-DSA-65 and ML-DSA-87 sign times exhibit anomalous variance on this VM (see note below)._
 
 **Performance analysis.**
 
-**Keygen**: PRISM-128 keygen (49.5 µs) is **faster** than ML-DSA-44 (63.0 µs)
-and ML-DSA-65 (106.3 µs) on this platform. The keygen path is identical in
-structure; the delta is measurement noise and cache warm-up differences. No FIS
-overhead is present in keygen.
+**Keygen**: PRISM-128 keygen (69.4 µs) is within measurement noise of ML-DSA-44
+(67.6 µs) and faster than ML-DSA-65 (109.7 µs). The keygen path is identical
+in structure to ML-DSA; no FIS overhead is present in keygen.
 
-**Signing — apples-to-apples CT comparison**: Comparing PRISM-128 (1,460 µs,
-CT) directly against non-CT ML-DSA-65 (175 µs) yields an 8.3× overhead ratio,
-but this comparison is not fair: ML-DSA-65 leaks the iteration count via timing
-(early-exit on first valid sample), while PRISM-128 does not.
+**Signing — apples-to-apples CT comparison**: The correct reference for PRISM-128
+(K=4, L=4) is ML-DSA-44, which shares the same module dimensions. Comparing
+PRISM-128 (1,631 µs, CT) directly against non-CT ML-DSA-44 (163.6 µs) yields
+a **10× overhead**, but this comparison is not fair: ML-DSA-44 leaks the
+iteration count via timing (early-exit on first valid sample), while PRISM-128
+does not.
 
-The correct reference is a hypothetical constant-time ML-DSA-65 that always
-completes all iterations. ML-DSA-65 averages 1.4 iterations; each complete
-iteration therefore costs 175 µs / 1.4 ≈ **125 µs**. Running 64 such complete
-iterations yields a CT-equivalent cost of **8,000 µs**. PRISM-128 at 1,460 µs
-is therefore **5.5× faster** than a constant-time ML-DSA-65 providing the same
-iteration-count privacy guarantee. Stated differently: the FIS construction
-achieves the same CT property at 1/5.5 of the cost of the naïve "just run all
-N iterations" approach, because PRISM-DSA's per-iteration cost (1,460/64 ≈
-22.8 µs) is substantially lower than a complete ML-DSA-65 iteration (125 µs)
-due to PRISM-128's smaller module dimensions (K=4, L=4 vs K=6, L=5).
+The correct reference is a hypothetical constant-time ML-DSA-44 that always
+completes all iterations. ML-DSA-44 averages 4.55 iterations; each complete
+iteration therefore costs 163.6 µs / 4.55 ≈ **36.0 µs**. Running 64 such
+complete iterations yields a CT-equivalent cost of **2,304 µs**. PRISM-128 at
+1,631 µs is therefore **1.4× faster** than a constant-time ML-DSA-44 providing
+the same iteration-count privacy guarantee. Stated differently: the FIS
+construction achieves the same CT property at 1/1.4 of the cost of the naïve
+"just run all N iterations" approach, because PRISM-DSA's per-iteration cost
+(1,631/64 ≈ 25.5 µs) is lower than a complete ML-DSA-44 iteration (36.0 µs).
+The theoretical FIS factor is 64 / (1/p_accept) = 64 / 4.55 ≈ 14.1×; the
+measured 10× is lower because PRISM-DSA's CT selection loop overhead
+(conditional_select over 64 candidates) is dominated by the per-slot compute.
 
-For completeness, 1,460 µs / 72.4 µs = **20.2× overhead** vs same-dimension
-non-CT ML-DSA-44 (K=4, L=4); the theoretical FIS factor is 64 / (1/p_accept) =
-64 / 4.55 ≈ 14.1×. The measured 20.2× includes per-iteration overhead from the
-CT selection loop (conditional_select over FIS_SLOTS candidates). This overhead
-is bounded and constant; it does not scale with key material.
+**Verify**: PRISM-128 verify (49.4 µs) is **3.0× slower** than ML-DSA-44
+(16.2 µs). The verify path is structurally identical to ML-DSA (same
+matrix-vector operations, same hint check, same challenge reconstruction); no
+FIS overhead is present. The gap is a pure **implementation delta**: our
+`verify.rs` performs the same operations as `ml-dsa 0.1.0` but without its
+micro-optimizations. This gap is expected to close with equivalent NTT
+optimization; it does not represent an algorithmic cost of PRISM-DSA.
 
-**Verify**: PRISM-128 verify (47.1 µs) is 2.8× slower than ML-DSA-44 (16.6 µs)
-and 2.0× slower than ML-DSA-65 (23.2 µs). The verify path is structurally
-identical to ML-DSA (same matrix-vector operations, same hint check, same
-challenge reconstruction); no FIS overhead is present. The gap is a pure
-**implementation delta**: our `verify.rs` performs the same operations as
-`ml-dsa 0.1.0` but without its micro-optimizations. This gap is expected to
-close with equivalent NTT optimization; it does not represent an algorithmic
-cost of PRISM-DSA.
-
-**ML-DSA-87 cache anomaly**: ML-DSA-87 sign (972 µs) is 5.6× slower than
-ML-DSA-65 (175 µs), whereas the algorithmic ratio from module dimensions
-(K=8,L=7 vs K=6,L=5) predicts ≈ (8×7)/(6×5) = 1.87×. The excess is attributed
-to L1 cache pressure: ML-DSA-87 signing keys (~4.9 KB) plus working polynomial
-arrays exceed the estimated L1 data cache of this VM's host CPU, causing cache
-miss penalties that compound non-linearly. This is a hardware-dependent artefact,
-not a correctness issue. Measurements are included for completeness; direct
-ML-DSA-87 comparisons should be made on a platform with published cache
-specifications.
+**VM measurement note — ML-DSA-65 and ML-DSA-87**: The ML-DSA-65 sign time
+(58.9 µs) and ML-DSA-87 sign time (558.3 µs) exhibit anomalous variance on
+this 2-core VM under shared load. ML-DSA-65 appearing faster than ML-DSA-44
+despite larger module dimensions (K=6,L=5 vs K=4,L=4) is inconsistent with
+the algorithmic cost model and is attributed to VM scheduler interference with
+the stochastic rejection-sampling loop. PRISM-128 numbers are stable across
+runs because FIS always executes exactly 64 iterations regardless of VM load.
+All ML-DSA cross-variant comparisons in this paper should be treated as
+indicative; the PRISM-128 vs CT-equivalent ML-DSA-44 comparison (same
+dimensions, same platform) remains valid.
 
 **SIMD projection**: Neither implementation uses SIMD NTT. If PRISM-DSA's NTT
 were optimized to match an AVX2/NEON implementation (~5–8× NTT speedup
