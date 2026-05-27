@@ -1,7 +1,7 @@
 # PRISM-DSA / COBALT-DSA — Latency Budget Analysis
 ### High-Throughput Deployment Guide for Critical Infrastructure
 
-**Date:** 2026-05-26  
+**Date:** 2026-05-27  
 **Hardware:** ARM64 (aarch64), 2-core VM  
 **Implementation:** Pure Rust, no hand-optimized assembly  
 **Baseline:** `ml-dsa` crate v0.1.0 (FIPS 204 reference), same toolchain
@@ -35,6 +35,13 @@ selects the output via constant-time `cmov`. The 10× sign overhead vs non-CT
 ML-DSA-44 is the precise cost of that guarantee. The CT-equivalent of ML-DSA-44
 (64 iterations forced) would cost ~2,330µs — PRISM-128 at 1,631µs is **~1.4×
 faster** because FIS parallel slot structure amortizes SHAKE-256 expansion.
+
+**Concrete threat (Phase 5B empirical, 2026-05-27):** A standard ML-DSA-44
+signing service accumulating ~14,000 signatures exposes enough timing variance
+for statistical t0 recovery via iteration-count correlation. This is a
+network-accessible, hardware-free timing attack. PRISM-DSA FIS produces
+identical wall-clock variance across all 64 iterations — the oracle has zero
+signal.
 
 ---
 
@@ -169,7 +176,9 @@ cloud target for EVIDENTUM backend.
 |------|-----------|------------|
 | Sign bottleneck at > 10K signs/sec | Low (not our use case) | Horizontal scale, hybrid deploy |
 | Verify latency under audit query burst | Low | 20× single-core headroom |
-| SHAKE-256 timing leak (documented in `sign.rs`) | Low (system noise floor) | Noted, not eliminated in v0.1.0 |
+| Timing oracle on standard ML-DSA (Phase 5B: ~14K sigs → t0 recovery) | **N/A — eliminated** | FIS fixed 64 iterations; zero iteration-count signal |
+| SHAKE-256 input scheduling leak (residual, documented in `sign.rs`) | Low (system noise floor) | Noted, not eliminated in v0.1.0 |
+| Nonce reuse → full s1 recovery in 2 sigs / 17ms (Phase 5A, NTT inversion) | Low (requires implementation defect) | Standard ML-DSA precondition; PRISM-DSA does not change this — nonce reuse is a deployment failure, not a scheme failure |
 | Pure-Rust vs optimized C gap | Medium | Acceptable for Phase 1; hardware path in §5 |
 
 ---
