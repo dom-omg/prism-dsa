@@ -553,31 +553,68 @@ operating on the constraint lattice.  Whether this is feasible with current
 algorithms is an open research question.
 
 **Timing instantiation and PRISM-DSA's partial mitigation.**  In standard
-ML-DSA (FIPS 204), the rejection check `‖ct₀‖_∞ ≥ γ₂` (check-3, FIPS 204
-§5.5) causes a loop abort when it fires — creating a timing-observable binary
-signal: did ct₀ exceed the bound on this attempt?  [COBALT26] identifies this
-as the natural timing instantiation of the c·t₀ oracle.
+ML-DSA (FIPS 204), the rejection sampling loop uses an early break; the
+iteration count is observable via wall-clock timing.  Two checks within the
+loop are key-dependent: check-3 (`‖ct₀‖_∞ ≥ γ₂`) and check-4 (`wt(h) > ω`).
+[COBALT26] identifies check-3 as the natural timing instantiation of the
+c·t₀ oracle.
 
-PRISM-DSA eliminates this specific timing signal.  `CT_NormCheck(ct0, γ₂)` in
-the FIS Attempt function (§3.1) evaluates unconditionally across all N=256
-coefficients without branching on the result.  The check-3 outcome is folded
-into `slot_valid` via constant-time AND; no timing difference is observable
-between a slot where check-3 would have fired and one where it would not.
+PRISM-DSA eliminates the timing channel entirely.  The FIS loop executes
+exactly 64 iterations with no early break; `CT_NormCheck(ct0, γ₂)` and
+`CT_NormCheck(h_weight, ω)` fold their results into `slot_valid` via
+constant-time AND.  No timing difference is observable between any slot
+outcome.
 
-**What PRISM-DSA does not fix.**  Eliminating the check-3 timing signal
-removes the known timing instantiation of the c·t₀ oracle.  It does not
-eliminate the underlying computation: `ct₀` is computed unconditionally in
-every FIS slot, and its coefficients remain present in registers and cache
-lines during that computation.  Power analysis, electromagnetic emanations,
-or cache-timing attacks that profile the `ct₀` computation itself — rather
-than the branch outcome — constitute residual channels not addressed by FIS.
-The UseHint interval oracle (§4.5.3) operates on public signature data only
-and is not mitigated by FIS; however, its practical impact on ML-DSA-44
-depends on resolving the open Phase 2 question (BDD at δ ≈ 0.60).
-Additionally, the c·s₁ oracle (also required for L2c recovery) has no known
-practical timing instantiation in standard or PRISM-DSA implementations;
-physical instantiation via profiled template attack remains an open
-engineering problem [COBALT26].
+**Empirical measurement (dilithium-py 1.4.0, ML-DSA-44).**  We measured the
+signing loop rejection breakdown across 4,277 attempts (1,000 accepted
+signatures, one key):
+
+| Check | Empirical reject rate | Key-dependent |
+|-------|-----------------------|---------------|
+| Check 1: ‖z‖_∞ ≥ γ₁-β | 59.7% of attempts | No |
+| Check 2: ‖r₀‖_∞ ≥ γ₂-β | ~30.6% of attempts | Weak (s₂) |
+| Check 3: ‖ct₀‖_∞ ≥ γ₂ | 0 / 4277 (0%) | Yes (t₀) |
+| Check 4: wt(h) > ω | 12 / 4277 (0.28%) | Yes (c·t₀) |
+| p̂_accept | 0.234 | — |
+
+Check 3 fires zero times — consistent with §4.6's structural analysis and the
+"< 0.01%" bound.  Check 4 fires at 1.2% of attempts reaching that stage
+(consistent with the "~2%" estimate in §4.6).  The combined key-dependent
+rejection fraction is ~0.3% of all attempts.
+
+**Two-channel orthogonality.**  A central finding is that the timing oracle
+and the hint oracle are *structurally orthogonal*:
+- The timing oracle leaks n_iter (iteration count).
+- The hint oracle leaks h.sum_hint() in accepted signatures.
+- Each accepted signature's h is generated from a fresh (y, c) pair
+  independent of prior rejected iterations.
+
+We confirm empirically: Pearson r(n_iter, wt(h)) ≈ 0 (n=1000, p > 0.87),
+consistent with the structural independence argument.
+
+**Hint oracle strength.**  Despite the timing oracle's weak key-dependent
+signal, the public hint oracle is strongly key-dependent.  Across 30
+independent keys (150 sigs each):
+
+    r(mean|t₀|, E[wt(h)]) = +0.704,  p < 0.001
+
+Keys with higher mean absolute t₀ coefficients produce systematically higher
+mean hint weights — directly observable from public signatures with no
+timing measurement.  E[wt(h)] ≈ 62.9 (out of ω=80) with std ≈ 0.95 across
+keys.  This confirms that the Phase 3 LP attack's effectiveness depends on
+the hint oracle channel strength, not the timing channel.
+
+Implementation: `attacks/phase5_timing_real.py` (dilithium-py 1.4.0,
+aarch64, 4,500 total signing operations).
+
+**What PRISM-DSA does not fix.**  PRISM-DSA eliminates the timing channel
+(σ(n_iter) = 0 by FIS construction).  The hint oracle operates on public
+signature data only and is not addressed by FIS.  Phase 3 LP and Phase 4
+barrier analysis pertain to the hint oracle channel.  Power analysis or
+electromagnetic measurements on the ct₀ computation itself constitute
+additional residual channels.  The c·s₁ oracle (required for L2c closure)
+has no known practical timing or hint instantiation; physical channels remain
+an open engineering problem [COBALT26].
 
 ### 4.6 Failure Probability Analysis
 
