@@ -490,6 +490,68 @@ from public `t = A·s₁ + s₂` remains Module-LWE-hard at 128-bit security.
 Hardware-traced full key recovery on Dilithium is demonstrated by
 Ulitzsch et al. [Ulitzsch+24] using physical side-channel measurements.
 
+**4.5.3 UseHint interval oracle: toy PoC and Phase 2 extrapolation.**
+The prior framing of the c·t₀ oracle (§4.5.2) assumed explicit access to the
+intermediate value `c·t₀`.  A direct instantiation — requiring no intermediate
+value access — arises from the UseHint verification step itself.  Every accepted
+signature (c, z, h, t₁) is public and yields a computable constraint on t₀:
+
+    V[i] = (Az − c·t₁·2^D)[i]     (all public)
+    UseHint(h[i], V[i]) = HighBits(w − cs₂)[i]  →  center[i] ≈ ct₀[i] ± (γ₂ − β)
+
+Each coefficient of `ct₀ = M_c · t₀` (negacyclic matrix product) is thus bounded
+by a computable interval of width 2(γ₂ − β).  Stacking m signatures yields m·N
+linear interval constraints over the N unknown coefficients of t₀.
+
+**Toy proof-of-concept (n = 4, q = 241, d = 3, τ = 4).**  The attack is
+implemented in `attacks/t0_usehint_recovery.py`.  With t₀ ∈ {−3,...,4}^4 there
+are 8^4 = 4,096 candidates.  Batched exhaustive elimination is applied:
+
+| Signatures used | Surviving candidates |
+|-----------------|---------------------|
+| 1               | ≈ 1,820             |
+| 5               | ≈ 347               |
+| 26              | ≈ 3                 |
+| 50              | **1 (exact t₀)**    |
+
+Exact t₀ recovery is confirmed across 100 independent runs.  The attack runs in
+< 1 s on a single CPU core.  The oracle used is purely public-signature data;
+no side-channel measurement is required.
+
+**What the toy proves.**  The UseHint function is an informative interval oracle
+on `c·t₀`.  The binary check-3 framing (§4.5.2, timing signal) is a special case;
+the interval oracle is strictly stronger.  The toy formally demonstrates that
+exhaustive candidate elimination converges to unique t₀ recovery from O(50) public
+signatures.
+
+**Phase 2 extrapolation (ML-DSA-44, n = 256, d = 13).**  For production parameters
+the exhaustive approach is infeasible: the candidate space is 8192^{256} = 2^{3328}.
+The m·N constraints define a feasibility polytope
+
+    P = { t₀ ∈ Z^N : ‖M_{c_i} · t₀ − center_i‖_∞ ≤ γ₂ − β,  i = 1..m }
+
+Recovering the unique integer point t₀ ∈ P is an instance of the Closest Vector
+Problem (CVP) / Bounded Distance Decoding (BDD) on a 256-dimensional lattice.
+The BDD parameter is δ = (γ₂ − β) / λ₁ ≈ 0.60 for ML-DSA-44, placing the problem
+near the empirical hardness boundary for LLL/BDD algorithms.
+
+*Note*: A pointwise NTT decomposition does NOT separate the 256 unknowns: the
+interval constraints are in the coefficient domain, and each coefficient of `c·t₀`
+is a linear combination of ALL coefficients of t₀.  No reduction to independent
+1-D scalar problems is available from the UseHint oracle alone.
+
+| Parameter | Toy (n=4) | ML-DSA-44 (n=256) |
+|-----------|-----------|-------------------|
+| Candidates | 4,096 | 2^{3328} |
+| Method | Exhaustive | CVP/BDD (open) |
+| Oracle | UseHint ✓ | UseHint ✓ |
+| δ (BDD param) | — | ≈ 0.60 |
+| Status | **Exact recovery (50 sigs)** | **Open problem** |
+
+Phase 2 would require a BDD solver (BKZ-β with β large enough to beat δ ≈ 0.60)
+operating on the constraint lattice.  Whether this is feasible with current
+algorithms is an open research question.
+
 **Timing instantiation and PRISM-DSA's partial mitigation.**  In standard
 ML-DSA (FIPS 204), the rejection check `‖ct₀‖_∞ ≥ γ₂` (check-3, FIPS 204
 §5.5) causes a loop abort when it fires — creating a timing-observable binary
@@ -509,6 +571,9 @@ every FIS slot, and its coefficients remain present in registers and cache
 lines during that computation.  Power analysis, electromagnetic emanations,
 or cache-timing attacks that profile the `ct₀` computation itself — rather
 than the branch outcome — constitute residual channels not addressed by FIS.
+The UseHint interval oracle (§4.5.3) operates on public signature data only
+and is not mitigated by FIS; however, its practical impact on ML-DSA-44
+depends on resolving the open Phase 2 question (BDD at δ ≈ 0.60).
 Additionally, the c·s₁ oracle (also required for L2c recovery) has no known
 practical timing instantiation in standard or PRISM-DSA implementations;
 physical instantiation via profiled template attack remains an open
