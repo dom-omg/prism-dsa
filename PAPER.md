@@ -933,6 +933,46 @@ in principle be applied on top of either to bound iteration count).
 **Citation note**: Raccoon and HAETAE citations are pending verification of final
 publication venues; see NIST PQC additional signatures process documentation.
 
+### 7.8 Nonce Reuse Attack Surface: Implementation Survey
+
+FIPS 204, Algorithm 7, Step 8 specifies:
+
+    ρ' = H(K ‖ rnd ‖ μ, 64)    where μ = H(tr ‖ M', 64)
+
+If an implementation omits μ from this derivation — computing ρ' = H(K) or
+H(K ‖ rnd) — then all signatures share the same mask vector y = ExpandMask(ρ', 0).
+Given two valid signatures (z₁, c₁) and (z₂, c₂) on distinct messages:
+
+    z₁ − z₂ = (c₁ − c₂) · s₁  in R_q
+
+This yields a full recovery of s₁ via NTT inversion in O(N log N) from two
+signing oracle queries. The attack is implemented in `attacks/phase5_nonce_reuse.py`
+and demonstrated on toy (N=4, q=241) and full ML-DSA-44 (N=256, q=8380417) parameters:
+recovery succeeds in ~17ms, with (c₁−c₂) invertible in R_q with probability ≈ 0.94.
+
+**Implementation survey (2026-05-27):**
+
+We reviewed ρ' derivation in four production or reference implementations.
+In each case, μ = H(tr ‖ M) is message-dependent and is included in the ρ' hash:
+
+| Implementation | Version | ρ' derivation | μ included | Result |
+|---|---|---|---|---|
+| dilithium-py (ml_dsa.py) | 1.4.0 | `self._h(k + rnd + mu, 64)` (line 299) | ✓ | Not vulnerable |
+| wolfSSL (wc_mldsa.c) | main | `H(K ‖ rnd ‖ mu)` (line 8263, 9188–9192) | ✓ | Not vulnerable |
+| dilithium/ref (sign.c) | pqcrystals | `shake256(key, rnd, mu)` (lines 121–127) | ✓ | Not vulnerable |
+| liboqs-python | 0.15.0 | empirical: z₁ ≠ z₂ across messages | ✓ | Not vulnerable |
+
+**Empirical test (liboqs):** Two ML-DSA-44 signatures on distinct messages produced
+z vectors with no shared coefficients. c̃₁ ≠ c̃₂ confirms distinct challenges.
+This is consistent with a correct ρ' derivation but does not constitute source-level
+verification of the liboqs C internals.
+
+**Claim (R44-compliant):** PRISM-DSA Phase 5A demonstrates that the mathematical
+precondition (constant ρ') implies complete key recovery in two queries. No tested
+implementation satisfies this precondition. The attack remains a proof-of-concept
+demonstrating the algebraic consequence of a specific implementation bug. It does
+not constitute a break of ML-DSA or of any audited implementation.
+
 ---
 
 ## 8. Conclusion and Future Work
