@@ -36,12 +36,16 @@ ML-DSA-44 is the precise cost of that guarantee. The CT-equivalent of ML-DSA-44
 (64 iterations forced) would cost ~2,330µs — PRISM-128 at 1,631µs is **~1.4×
 faster** because FIS parallel slot structure amortizes SHAKE-256 expansion.
 
-**Concrete threat (Phase 5B empirical, 2026-05-27):** A standard ML-DSA-44
-signing service accumulating ~14,000 signatures exposes enough timing variance
-for statistical t0 recovery via iteration-count correlation. This is a
-network-accessible, hardware-free timing attack. PRISM-DSA FIS produces
-identical wall-clock variance across all 64 iterations — the oracle has zero
-signal.
+**Concrete threat (Phase 6 empirical, 2026-05-27):** An adversary with
+power/EM side-channel access to a standard ML-DSA-44 signing device can use
+timing to select n_iter=1 traces (22% of signatures), reducing the DPA
+trace count for s1 recovery by **14x** relative to PRISM-DSA.
+Precondition: power or EM measurement per signing operation (HW model).
+Empirical: ML-DSA CPA succeeds at N≈20 signing ops per NTT coefficient;
+PRISM-DSA requires N≈300 (ratio 15x, matching theoretical 14.1x).
+PRISM-DSA FIS eliminates timing-based trace selection — the attacker cannot
+distinguish accepted from rejected iterations — yielding the 14x hardening.
+Independent of hint oracle (orthogonal channel, Phase 5B/Phase 3-4).
 
 ---
 
