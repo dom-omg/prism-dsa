@@ -105,7 +105,7 @@ issuance (~500M/day) fits within 1 dedicated signing core with PRISM-128.
 
 ---
 
-### 3.3 Blockchain Forensics Audit Trail (TRACE / EVIDENTUM)
+### 3.3 Blockchain Forensics Audit Trail (TRACE / IRONPROOF)
 
 **Pattern:** Each flagged wallet address generates a signed proof record. Queries
 verify those records against live intelligence.
@@ -170,7 +170,7 @@ on cryptographic hardware adds:
 
 On Graviton3 (8 ARM cores with SHA3 extensions): estimated **~5,000 signs/sec**
 and **~160,000 verifies/sec** per instance. This is the recommended
-cloud target for EVIDENTUM backend.
+cloud target for IRONPROOF backend.
 
 ---
 
