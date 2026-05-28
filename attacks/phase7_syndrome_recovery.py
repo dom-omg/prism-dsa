@@ -355,7 +355,7 @@ def run_phase7(n_sigs: int = 250,
     # ── STEP 1: Error rate curve ─────────────────────────────────────────────
     print(f"\n{'─'*60}")
     print("STEP 1 — Error Rate Curve (poly 0, all N=256 NTT coefficients)")
-    checkpoints = [c for c in [20, 50, 100, 200, 250] if c <= n_sigs]
+    checkpoints = [c for c in [20, 50, 100, 200, 300, 500, 700, 1000, 1400, 2000] if c <= n_sigs]
 
     t0 = time.perf_counter()
     ml_curve = error_rate_curve(dsa, sk, s1_hat_true, n_sigs, checkpoints,
